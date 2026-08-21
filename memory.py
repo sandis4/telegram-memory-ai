@@ -1,4 +1,4 @@
-"""memory.py — менеджер памяти ИИ-бота (pygame): загрузка, создание, редактирование и удаление md/txt файлов из папки memory."""
+"""memory.py — AI bot memory manager (pygame): load, create, edit and delete md/txt files from the memory folder."""
 from pathlib import Path
 
 import pygame
@@ -36,7 +36,7 @@ class App:
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode((W, H))
-        pygame.display.set_caption("Память бота")
+        pygame.display.set_caption("Bot Memory")
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont("arial", 18)
         self.font_small = pygame.font.SysFont("arial", 14)
@@ -48,7 +48,7 @@ class App:
         self.selected = None
         self.confirm_delete = False
         self.list_scroll = 0
-        self.status = "Номера [file-N] — для тегов в боте. «Загрузить» — импорт, двойной клик — правка"
+        self.status = "Numbers [file-N] are for tags in the bot. Load imports files, double-click opens the editor"
 
         self.edit_name = None
         self.text = ""
@@ -68,7 +68,7 @@ class App:
 
         self.refresh()
 
-    # ---------------- данные ----------------
+    # ---------------- data ----------------
 
     def refresh(self):
         MEMORY_DIR.mkdir(exist_ok=True)
@@ -85,7 +85,7 @@ class App:
     def total_chars(self) -> int:
         return sum(len(read_text(p)) for p in self.files)
 
-    # ---------------- редактор ----------------
+    # ---------------- editor ----------------
 
     def rewrap(self):
         self.wrapped = []
@@ -105,7 +105,7 @@ class App:
         try:
             self.text = read_text(MEMORY_DIR / name)
         except OSError as e:
-            self.status = f"Не удалось открыть файл: {e}"
+            self.status = f"Failed to open file: {e}"
             return
         self.edit_name = name
         self.cursor = len(self.text)
@@ -118,10 +118,10 @@ class App:
         try:
             (MEMORY_DIR / self.edit_name).write_text(self.text, encoding="utf-8")
         except OSError as e:
-            self.status = f"Ошибка сохранения: {e}"
+            self.status = f"Save error: {e}"
             return
         self.dirty = False
-        self.status = f"Сохранено: {self.edit_name}"
+        self.status = f"Saved: {self.edit_name}"
         self.refresh()
 
     def cursor_line(self) -> int:
@@ -194,7 +194,7 @@ class App:
         col = round((x - 24) / self.char_w)
         self.cursor = s + max(0, min(col, len(disp)))
 
-    # ---------------- действия списка ----------------
+    # ---------------- list actions ----------------
 
     def load_file_dialog(self):
         import tkinter as tk
@@ -204,8 +204,8 @@ class App:
         root.attributes("-topmost", True)
         path = filedialog.askopenfilename(
             parent=root,
-            title="Выберите md или txt файл",
-            filetypes=[("Документы", "*.md *.txt"), ("Все файлы", "*.*")],
+            title="Select an md or txt file",
+            filetypes=[("Documents", "*.md *.txt"), ("All files", "*.*")],
         )
         root.destroy()
         if not path:
@@ -219,9 +219,9 @@ class App:
         try:
             dst.write_bytes(src.read_bytes())
         except OSError as e:
-            self.status = f"Ошибка копирования: {e}"
+            self.status = f"Copy error: {e}"
             return
-        self.status = f"Загружено: {dst.name}"
+        self.status = f"Loaded: {dst.name}"
         self.selected = dst.name
         self.refresh()
 
@@ -233,7 +233,7 @@ class App:
             name += ".md"
         path = MEMORY_DIR / name
         if path.exists():
-            self.status = "Такой файл уже есть"
+            self.status = "File already exists"
             return
         path.write_text("", encoding="utf-8")
         self.refresh()
@@ -242,22 +242,22 @@ class App:
 
     def delete_selected(self):
         if not self.selected:
-            self.status = "Сначала выбери файл в списке"
+            self.status = "Select a file in the list first"
             return
         if not self.confirm_delete:
             self.confirm_delete = True
-            self.status = f"Удалить «{self.selected}»? Нажми «Удалить» ещё раз"
+            self.status = f'Delete "{self.selected}"? Press Delete again'
             return
         try:
             (MEMORY_DIR / self.selected).unlink()
         except OSError as e:
-            self.status = f"Ошибка удаления: {e}"
+            self.status = f"Delete error: {e}"
             return
-        self.status = f"Удалено: {self.selected}"
+        self.status = f"Deleted: {self.selected}"
         self.selected = None
         self.refresh()
 
-    # ---------------- отрисовка ----------------
+    # ---------------- drawing ----------------
 
     def button(self, key, label, x, y, w, h, color=ACCENT):
         rect = pygame.Rect(x, y, w, h)
@@ -275,16 +275,16 @@ class App:
         self.screen.fill(BG)
         pygame.draw.rect(self.screen, PANEL, (0, 0, W, 56))
 
-        title = self.font_title.render("Память бота", True, TEXT)
+        title = self.font_title.render("Bot Memory", True, TEXT)
         self.screen.blit(title, (20, 12))
         sel_tag = ""
         if self.selected:
             for i, p in enumerate(self.files):
                 if p.name == self.selected:
-                    sel_tag = f"   |   Выбран: [file-{i + 1}]"
+                    sel_tag = f"   |   Selected: [file-{i + 1}]"
                     break
         info = self.font_small.render(
-            f"Файлов: {len(self.files)}   Символов: {self.total_chars()}{sel_tag}",
+            f"Files: {len(self.files)}   Chars: {self.total_chars()}{sel_tag}",
             True, MUTED,
         )
         self.screen.blit(info, (220, 22))
@@ -307,25 +307,25 @@ class App:
             name_surf = self.font.render(path.name, True, TEXT)
             self.screen.blit(name_surf, (rect.x + 12 + tag_surf.get_width() + 10, rect.y + 5))
             size_surf = self.font_small.render(
-                f"{path.stat().st_size / 1024:.1f} КБ", True, MUTED)
+                f"{path.stat().st_size / 1024:.1f} KB", True, MUTED)
             self.screen.blit(size_surf, size_surf.get_rect(
                 midright=(rect.right - 12, rect.centery)))
             self.rows.append((rect, path.name))
 
         if not self.files:
-            hint = self.font.render("Папка memory пуста — нажми «Загрузить» или «Создать»",
+            hint = self.font.render("Memory folder is empty — press Load or New",
                                     True, MUTED)
             self.screen.blit(hint, hint.get_rect(center=(W // 2, top + 60)))
 
         by, bw, gap = H - 52, 150, 14
         x = 20
-        self.button("load", "Загрузить", x, by, bw, 36); x += bw + gap
-        self.button("new", "Создать", x, by, bw, 36); x += bw + gap
-        self.button("edit", "Редактировать", x, by, bw + 10, 36); x += bw + 10 + gap
+        self.button("load", "Load", x, by, bw, 36); x += bw + gap
+        self.button("new", "New", x, by, bw, 36); x += bw + gap
+        self.button("edit", "Edit", x, by, bw + 10, 36); x += bw + 10 + gap
         del_color = DANGER if self.confirm_delete else ACCENT
-        del_label = "Точно удалить?" if self.confirm_delete else "Удалить"
+        del_label = "Sure?" if self.confirm_delete else "Delete"
         self.button("del", del_label, x, by, bw, 36, del_color); x += bw + gap
-        self.button("refresh", "Обновить", x, by, bw, 36)
+        self.button("refresh", "Refresh", x, by, bw, 36)
 
         status = self.font_small.render(self.status, True, MUTED)
         self.screen.blit(status, (20, H - 74))
@@ -338,7 +338,7 @@ class App:
         title = self.font_title.render(f"{self.edit_name}{mark}", True,
                                        CURSOR_COLOR if self.dirty else TEXT)
         self.screen.blit(title, (20, 12))
-        hint = self.font_small.render("Ctrl+S — сохранить   Esc — назад", True, MUTED)
+        hint = self.font_small.render("Ctrl+S — save   Esc — back", True, MUTED)
         self.screen.blit(hint, hint.get_rect(right=(W - 20), centery=28))
 
         area = pygame.Rect(0, self.edit_top, W, H - self.edit_top - 50)
@@ -361,8 +361,8 @@ class App:
         pygame.draw.line(self.screen, PANEL, (0, area.bottom), (W, area.bottom), 2)
 
         by = H - 42
-        self.button("save", "Сохранить (Ctrl+S)", 20, by, 210, 34, GREEN)
-        self.button("back", "Назад (Esc)", W - 130, by, 110, 34, ACCENT_DIM)
+        self.button("save", "Save (Ctrl+S)", 20, by, 210, 34, GREEN)
+        self.button("back", "Back (Esc)", W - 130, by, 110, 34, ACCENT_DIM)
         status = self.font_small.render(self.status, True, MUTED)
         self.screen.blit(status, (250, by + 9))
 
@@ -371,7 +371,7 @@ class App:
         self.screen.fill(BG)
         panel = pygame.Rect(W // 2 - 260, H // 2 - 90, 520, 180)
         pygame.draw.rect(self.screen, PANEL, panel, border_radius=10)
-        t = self.font.render("Имя нового файла (Enter — создать, Esc — отмена):", True, TEXT)
+        t = self.font.render("New file name (Enter — create, Esc — cancel):", True, TEXT)
         self.screen.blit(t, (panel.x + 20, panel.y + 18))
         box = pygame.Rect(panel.x + 20, panel.y + 55, panel.w - 40, 40)
         pygame.draw.rect(self.screen, BG, box, border_radius=6)
@@ -380,10 +380,10 @@ class App:
         if pygame.time.get_ticks() % 1000 < 500:
             cx = box.x + 10 + len(self.new_name) * self.char_w
             pygame.draw.rect(self.screen, CURSOR_COLOR, (cx, box.y + 8, 2, 24))
-        hint = self.font_small.render("Без расширения добавится .md", True, MUTED)
+        hint = self.font_small.render(".md will be added if there is no extension", True, MUTED)
         self.screen.blit(hint, (panel.x + 20, panel.y + 115))
 
-    # ---------------- события ----------------
+    # ---------------- events ----------------
 
     def handle_keydown_list(self, event):
         if event.key in (pygame.K_UP, pygame.K_DOWN):
@@ -458,12 +458,12 @@ class App:
                             if self.selected:
                                 self.open_editor(self.selected)
                             else:
-                                self.status = "Сначала выбери файл в списке"
+                                self.status = "Select a file in the list first"
                         elif clicked_btn == "del":
                             self.delete_selected()
                         elif clicked_btn == "refresh":
                             self.refresh()
-                            self.status = "Список обновлён"
+                            self.status = "List refreshed"
                         elif not clicked_btn:
                             hit = next((name for rect, name in self.rows
                                         if rect.collidepoint(event.pos)), None)
