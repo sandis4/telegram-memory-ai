@@ -271,7 +271,7 @@ async def answer_with_web(message: Message, query: str, news: bool = False) -> N
     messages = build_messages(user_id, "", extra)
     answer, ai_err = await send_streaming(message.bot, message.chat.id, messages)
     if answer is None:
-        answer, ai_err = await ask_ai(messages, attempts=2)
+        answer, ai_err = await ask_ai(messages)
     if answer is None:
         history.pop()
         await message.answer(f"Не получилось получить ответ ({ai_err}). Попробуй ещё раз.")
@@ -437,6 +437,21 @@ async def _typing_loop(bot: Bot, chat_id: int) -> None:
         await asyncio.sleep(4)
 
 
+async def send_plain(bot: Bot, chat_id: int, text: str) -> None:
+    """Отправка текста по кускам с обработкой флуд-лимитов."""
+    for i in range(0, len(text), TG_LIMIT):
+        part = text[i : i + TG_LIMIT]
+        for attempt in range(2):
+            try:
+                await bot.send_message(chat_id, part)
+                break
+            except TelegramRetryAfter as e:
+                if attempt == 0:
+                    await asyncio.sleep(e.retry_after)
+                else:
+                    raise
+
+
 async def send_streaming(bot: Bot, chat_id: int, messages: list[dict]) -> tuple[str | None, str]:
     """Стримит ответ как черновик-статью (Rich Messages), финализирует sendRichMessage.
     Если API/чат не поддерживает rich — откат на обычные сообщения с лимитом 4096."""
@@ -551,13 +566,25 @@ async def send_streaming(bot: Bot, chat_id: int, messages: list[dict]) -> tuple[
         except Exception as e:
             logger.warning("sendRichMessage не удался (%s), отправка текстом", e)
 
-    if msg is None:
-        msg = await bot.send_message(chat_id, "…")
-    rest = body[sent_len:]
-    if rest:
-        await edit_msg(msg, rest[:TG_LIMIT])
-        for i in range(TG_LIMIT, len(rest), TG_LIMIT):
-            await bot.send_message(chat_id, rest[i : i + TG_LIMIT])
+    # обычная отправка: дописываем хвост в открытое сообщение или шлём всё целиком
+    try:
+        if msg is None:
+            await send_plain(bot, chat_id, body)
+        else:
+            rest = body[sent_len:]
+            if rest:
+                if len(rest) <= TG_LIMIT:
+                    await edit_msg(msg, rest)
+                else:
+                    await edit_msg(msg, rest[:TG_LIMIT])
+                    await send_plain(bot, chat_id, rest[TG_LIMIT:])
+    except Exception as e:
+        logger.warning("Обычная отправка не удалась (%s), пробую без форматирования", e)
+        try:
+            await send_plain(bot, chat_id, body[sent_len:] if msg is not None else body)
+        except Exception as e2:
+            logger.error("Отправка не удалась совсем: %s", e2)
+            return None, f"{type(e2).__name__}: {e2}"
     return full, err
 
 
@@ -679,7 +706,7 @@ async def on_text(message: Message) -> None:
 
     answer, err = await send_streaming(message.bot, message.chat.id, messages)
     if answer is None:
-        answer, err = await ask_ai(messages, attempts=2)
+        answer, err = await ask_ai(messages)
     if answer is None:
         history.pop()
         await message.answer(f"Не получилось получить ответ ({err}). Попробуй ещё раз.")
