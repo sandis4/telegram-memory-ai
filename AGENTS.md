@@ -36,8 +36,10 @@ Pygame tests need `SDL_VIDEODRIVER=dummy`.
   `p.name.lower()`. Both bot.py and memory.py must use identical ordering.
 - Web search triggers: `[web]`, `[поиск]`, `[интернет]` tag in a normal message,
   `/web <query>` command, `/news <topic>` for news. Search lib: `ddgs`
-  (metasearch: DuckDuckGo/Bing/Brave/Startpage). Top result's full text is
-  extracted (`DDGS.extract`) and added as context.
+  (metasearch: DuckDuckGo/Bing/Brave/Startpage). Before searching, the model
+  rewrites the user's request into a self-contained query using dialog history
+  (`make_search_query`, 1 attempt, falls back to the raw text). Top result's full
+  text is extracted (`DDGS.extract`) and added as context.
 - `strip_tags` removes only `[file-N]`; `strip_all_tags` also removes web tags.
 - Handlers order matters: Command handlers are registered before the catch-all
   `F.text` handler. Current handlers: start, files, web, news, clear, delete, text.

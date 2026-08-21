@@ -196,6 +196,35 @@ def format_search(results: list[dict], news: bool = False) -> str:
     return "\n\n".join(blocks)
 
 
+QUERY_SYSTEM = (
+    "Ты помогаешь делать веб-поиск. На основе истории диалога преврати запрос "
+    "пользователя в короткий самодостаточный поисковый запрос: добавь пропущенный "
+    "контекст (о чём шла речь), убери лишние слова. "
+    "Если запрос уже самодостаточен — верни его без изменений. "
+    "Ответь только самим запросом, одной строкой, без кавычек и пояснений."
+)
+
+
+async def make_search_query(user_id: int, query: str) -> str:
+    """Формулирует поисковый запрос с учётом истории диалога."""
+    hist = histories.get(user_id, [])[:-1]  # текущий запрос уже в истории
+    if not hist:
+        return query
+    ctx = "\n".join(f"{m['role']}: {m['content'][:400]}" for m in hist[-6:])
+    messages = [
+        {"role": "system", "content": QUERY_SYSTEM},
+        {"role": "user", "content": f"История диалога:\n{ctx}\n\nЗапрос: {query}"},
+    ]
+    try:
+        answer, _ = await ask_ai(messages, attempts=1)
+    except Exception:
+        return query
+    if not answer:
+        return query
+    q = answer.strip().splitlines()[0].strip(' "\'«»')[:200].strip()
+    return q or query
+
+
 async def answer_with_web(message: Message, query: str, news: bool = False) -> None:
     """Ищет в интернете и отвечает нейросетью с опорой на найденное."""
     query = strip_all_tags(query)
@@ -205,13 +234,15 @@ async def answer_with_web(message: Message, query: str, news: bool = False) -> N
     history.append({"role": "user", "content": prefix + query})
 
     status = await message.answer("Ищу новости..." if news else "Ищу в интернете...")
-    results, err = await web_search(query, news)
+    search_q = await make_search_query(user_id, query)
+    results, err = await web_search(search_q, news)
 
     extra = ""
     if results:
         kind = "свежие новостные статьи" if news else "результаты веб-поиска"
         extra = (
-            f"\nНиже — {kind} по запросу «{query}». "
+            f"\nНиже — {kind} по запросу «{search_q}» "
+            f"(пользователь просил: «{query}»). "
             "Опирайся на них при ответе и указывай источники ссылками.\n\n"
             + format_search(results, news)
         )
@@ -539,7 +570,8 @@ async def cmd_start(message: Message) -> None:
         "Файлы памяти подключаются тегом [file-N] в сообщении, например:\n"
         "[file-1] Перескажи суть этого файла\n\n"
         "Поиск в интернете: [web] запрос или /web запрос\n"
-        "Свежие новости: /news тема\n\n"
+        "Свежие новости: /news тема\n"
+        "Запрос для поиска бот уточняет сам по истории диалога\n\n"
         "/files — список файлов с номерами\n"
         "/clear — очистить историю диалога\n"
         "/delete — удалить все сообщения в чате\n"
