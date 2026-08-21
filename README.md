@@ -103,9 +103,3 @@ Once the bot runs, open Telegram and talk to your bot. The bot will forward mess
 ## License
 
 Specify a license for your project (e.g., MIT). If you have no preference, add an `LICENSE` file.
-
----
-
-If you'd like, I can:
-- Fill the README with specifics from the repository (entrypoint filename, dependencies) if you want — I can scan the repo and update accordingly.
-- Create a minimal `requirements.txt` or add an example `main.py` run command based on the code.
