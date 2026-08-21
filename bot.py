@@ -631,8 +631,8 @@ async def cmd_delete(message: Message) -> None:
 
 @dp.message(F.text)
 async def on_text(message: Message) -> None:
-    if not AI_API_KEY or AI_API_KEY.startswith("сюда"):
-        await message.answer("Заполни AI_API_KEY в файле .env")
+    if not AI_API_KEY or AI_API_KEY.startswith(("сюда", "paste_your")):
+        await message.answer("Fill in AI_API_KEY in the .env file")
         return
     user_id = message.from_user.id
     if WEB_TAG_RE.search(message.text):
@@ -658,8 +658,8 @@ async def on_text(message: Message) -> None:
 
 
 async def main() -> None:
-    if not TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN.startswith("сюда"):
-        raise SystemExit("Заполни TELEGRAM_BOT_TOKEN в файле .env")
+    if not TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN.startswith(("сюда", "paste_your")):
+        raise SystemExit("Fill in TELEGRAM_BOT_TOKEN in the .env file")
     MEMORY_DIR.mkdir(exist_ok=True)
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
     logger.info("Бот запущен. Модель: %s, API: %s", AI_MODEL, AI_API_URL)
