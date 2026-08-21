@@ -171,6 +171,8 @@ class App:
         self.ensure_visible()
 
     def move(self, dx=0, dy=0, home=False, end=False, page=0):
+        if not self.wrapped:
+            return
         if home:
             self.cursor = self.line_bounds()[0]
         elif end:
@@ -187,6 +189,8 @@ class App:
         self.ensure_visible()
 
     def click_editor(self, pos):
+        if not self.wrapped:
+            return
         x, y = pos
         idx = self.scroll_line + int((y - self.edit_top) // self.line_h)
         idx = max(0, min(idx, len(self.wrapped) - 1))

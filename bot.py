@@ -249,7 +249,10 @@ async def answer_with_web(message: Message, query: str, news: bool = False) -> N
         if not news and results[0].get("href"):
             try:  # полный текст первой статьи
                 ext = await asyncio.to_thread(_ddg_extract, results[0]["href"])
-                content = (ext.get("content") or "").strip()[:WEB_EXTRACT_CHARS]
+                content = ext.get("content") or ""
+                if isinstance(content, bytes):
+                    content = content.decode("utf-8", "replace")
+                content = content.strip()[:WEB_EXTRACT_CHARS]
                 if len(content) > 200:
                     extra += (
                         f"\n\n### Полный текст первой ссылки ({results[0]['href']})\n"
@@ -290,6 +293,9 @@ def trim_history(history: list[dict]) -> None:
     while history and (len(history) > MAX_HISTORY * 2 or total > MAX_HISTORY_CHARS):
         total -= len(history[0]["content"])
         history.pop(0)
+    # история не должна начинаться с ответа ассистента
+    while history and history[0]["role"] == "assistant":
+        history.pop(0)
 
 
 # ---------------- markdown -> Telegram HTML ----------------
@@ -324,15 +330,17 @@ def md_to_html(text: str) -> str:
     return STASH_RE.sub(unstash, text)
 
 
-async def edit_msg(msg: Message, text: str) -> None:
+async def edit_msg(msg: Message, text: str) -> bool:
     """Правит сообщение с HTML-разметкой; если разметка битая — обычным текстом."""
     try:
         await msg.edit_text(md_to_html(text), parse_mode="HTML")
+        return True
     except Exception:
         try:
             await msg.edit_text(text[:TG_LIMIT])
+            return True
         except Exception:
-            pass
+            return False
 
 
 # ---------------- Rich Messages (Bot API 10.1+) ----------------
@@ -349,7 +357,11 @@ async def tg_call(method: str, **payload):
     data = resp.json()
     if not data.get("ok"):
         raise RuntimeError(data.get("description", f"{method}: unknown error"))
-    return data.get("result")
+    result = data.get("result")
+    # запоминаем отправленные ботом rich-сообщения для /delete
+    if isinstance(result, dict) and result.get("message_id") and payload.get("chat_id"):
+        track(payload["chat_id"], result["message_id"])
+    return result
 
 
 def split_for_rich(text: str) -> list[str]:
@@ -443,7 +455,8 @@ async def send_plain(bot: Bot, chat_id: int, text: str) -> None:
         part = text[i : i + TG_LIMIT]
         for attempt in range(2):
             try:
-                await bot.send_message(chat_id, part)
+                m = await bot.send_message(chat_id, part)
+                track(chat_id, m.message_id)
                 break
             except TelegramRetryAfter as e:
                 if attempt == 0:
@@ -526,6 +539,7 @@ async def send_streaming(bot: Bot, chat_id: int, messages: list[dict]) -> tuple[
                 continue
             if msg is None:
                 msg = await bot.send_message(chat_id, "…")
+                track(chat_id, msg.message_id)
             due = (
                 (not first_edit_done and len(full) >= FIRST_EDIT_CHARS)
                 or now - last_edit >= EDIT_INTERVAL
@@ -538,9 +552,10 @@ async def send_streaming(bot: Bot, chat_id: int, messages: list[dict]) -> tuple[
             if cur_len > CHUNK_SAFE:
                 nl = full.rfind("\n", sent_len + CHUNK_SAFE - 300, sent_len + CHUNK_SAFE)
                 cut = nl + 1 if nl != -1 else sent_len + CHUNK_SAFE
-                await edit_msg(msg, full[sent_len:cut])
-                sent_len = cut
-                msg = await bot.send_message(chat_id, "…")
+                if await edit_msg(msg, full[sent_len:cut]):
+                    sent_len = cut
+                    msg = await bot.send_message(chat_id, "…")
+                    track(chat_id, msg.message_id)
             else:
                 await edit_msg(msg, full[sent_len:])
     except Exception as e:
@@ -679,19 +694,24 @@ async def cmd_delete(message: Message) -> None:
 
     chat_msgs.pop(chat_id, None)
     histories.pop(message.from_user.id, None)
-    await bot.delete_message(chat_id, cmd_id)
-    done = await bot.send_message(
-        chat_id,
-        f"Чат очищен: удалено {deleted} сообщений.\n"
-        "(сообщения старше 48 часов Telegram удалять не даёт)",
-    )
-    track(chat_id, done.message_id)
+    await delete_quiet(bot, chat_id, cmd_id)
+    try:
+        done = await bot.send_message(
+            chat_id,
+            f"Чат очищен: удалено {deleted} сообщений.\n"
+            "(сообщения старше 48 часов Telegram удалять не даёт)",
+        )
+        track(chat_id, done.message_id)
+    except Exception:
+        logger.warning("Не удалось отправить подтверждение /delete")
 
 
 @dp.message(F.text)
 async def on_text(message: Message) -> None:
     if not AI_API_KEY or AI_API_KEY.startswith(("сюда", "paste_your")):
         await message.answer("Fill in AI_API_KEY in the .env file")
+        return
+    if message.from_user is None:  # посты в каналах — некому отвечать
         return
     user_id = message.from_user.id
     if WEB_TAG_RE.search(message.text):
@@ -700,8 +720,14 @@ async def on_text(message: Message) -> None:
             await answer_with_web(message, query, news=False)
             return
     memory = load_memory_by_tags(message.text)
+    text = strip_tags(message.text)
+    if not text:
+        if memory:  # только теги [file-N] — просим пересказ
+            text = "Кратко перескажи содержание подключённых файлов."
+        else:
+            return
     history = histories.setdefault(user_id, [])
-    history.append({"role": "user", "content": strip_tags(message.text)})
+    history.append({"role": "user", "content": text})
     messages = build_messages(user_id, memory)
 
     answer, err = await send_streaming(message.bot, message.chat.id, messages)
@@ -722,7 +748,10 @@ async def main() -> None:
     MEMORY_DIR.mkdir(exist_ok=True)
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
     logger.info("Бот запущен. Модель: %s, API: %s", AI_MODEL, AI_API_URL)
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await tg_http.aclose()
 
 
 if __name__ == "__main__":
