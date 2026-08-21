@@ -1,0 +1,6 @@
+aiogram>=3.30.0
+openai>=2.24.0
+python-dotenv>=1.2.2
+pygame>=2.6.1
+requests>=2.33.0
+ddgs>=9.0
