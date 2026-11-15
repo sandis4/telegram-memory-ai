@@ -1,6 +1,6 @@
-aiogram>=3.30.0
-openai>=2.24.0
-python-dotenv>=1.2.2
+aiogram>=3.31.0
+openai>=3.51.0
+anthropic>=2.8.0
+python-dotenv>=1.2.4
 pygame>=2.6.1
-requests>=2.33.0
-ddgs>=9.0
+ddgs>=9.16.1
